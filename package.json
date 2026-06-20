@@ -1,0 +1,71 @@
+{
+  "name": "@autodisc/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CLI for authenticating with Autodisc and deploying projects to Autodisc hosting",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AutoDisc/autodisc-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AutoDisc/autodisc-cli/issues"
+  },
+  "homepage": "https://autodisc.xyz/docs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "autodisc": "dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist",
+    "dev": "tsx src/index.ts",
+    "prepack": "npm run clean && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "axios": "^1.7.9",
+    "boxen": "^8.0.1",
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^13.1.0",
+    "conf": "^13.0.1",
+    "dotenv": "^16.4.7",
+    "form-data": "^4.0.1",
+    "get-port": "^7.1.0",
+    "inquirer": "^10.2.2",
+    "js-yaml": "^4.1.0",
+    "open": "^10.1.0",
+    "ora": "^8.2.0",
+    "smol-toml": "^1.6.1"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.1",
+    "@types/boxen": "^3.0.5",
+    "@types/conf": "^3.0.3",
+    "@types/form-data": "^2.5.1",
+    "@types/inquirer": "^9.0.7",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.10.1",
+    "@types/ora": "^3.0.7",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "overrides": {
+    "tmp": ">=0.2.4"
+  }
+}

@@ -21,6 +21,12 @@ function validateDeployConfig(config: DeployConfig, formatLabel: string): Deploy
   if (!config.runtime?.start_command && config.source.type !== 'upload') {
     throw new Error(`${formatLabel} missing runtime.start_command`);
   }
+  if (
+    config.runtime.port !== undefined &&
+    (!Number.isInteger(config.runtime.port) || config.runtime.port < 1 || config.runtime.port > 65_535)
+  ) {
+    throw new Error(`${formatLabel} runtime.port must be an integer between 1 and 65535`);
+  }
 
   return config;
 }

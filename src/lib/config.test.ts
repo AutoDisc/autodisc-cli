@@ -26,12 +26,16 @@ beforeEach(() => {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autodisc-cli-config-test-'));
   delete process.env.AUTODISC_API_URL;
   delete process.env.AUTODISC_TOKEN;
+  delete process.env.AUTODISC_DEBUG;
+  delete process.env.AUTODISC_NO_COLOR;
 });
 
 afterEach(() => {
   fs.rmSync(tempDir, { recursive: true, force: true });
   delete process.env.AUTODISC_API_URL;
   delete process.env.AUTODISC_TOKEN;
+  delete process.env.AUTODISC_DEBUG;
+  delete process.env.AUTODISC_NO_COLOR;
 });
 
 describe('ConfigManager', () => {
@@ -55,8 +59,17 @@ describe('ConfigManager', () => {
 
   it('masks sensitive tokens when requested', () => {
     const manager = createManager();
-    manager.setAuth(createSession());
+    manager.setAuth(createSession({ refreshToken: 'refresh-secret' }));
     const masked = manager.getAll(true);
-    expect(masked.auth?.token).toBe('abcd…5678');
+    expect(masked.auth?.token).toBe('[redacted]');
+    expect(masked.auth?.refreshToken).toBe('[redacted]');
+  });
+
+  it('honors debug and no-color environment overrides', () => {
+    const manager = createManager();
+    process.env.AUTODISC_DEBUG = '1';
+    process.env.AUTODISC_NO_COLOR = '1';
+
+    expect(manager.getEffectiveConfig().ui).toMatchObject({ verbose: true, colors: false });
   });
 });

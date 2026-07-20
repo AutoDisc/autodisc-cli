@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import chalk from 'chalk';
-import { HostingAPI } from '../../lib/hosting.js';
+import { HostingAPI, redactServerEnvironment } from '../../lib/hosting.js';
 import { logger } from '../../lib/logger.js';
 import type { HostingDeploymentResponse, HostingServerResponse, HostingStatsResponse } from '../../types.js';
 
@@ -58,7 +58,7 @@ async function fetchSnapshot(hosting: HostingAPI): Promise<MetricsSnapshot> {
 
   return {
     timestamp: new Date().toISOString(),
-    server,
+    server: redactServerEnvironment(server),
     stats,
     latest_deployment: deployments[0] ?? null,
   };

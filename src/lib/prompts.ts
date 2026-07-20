@@ -24,3 +24,16 @@ export async function input(message: string, options?: { default?: string; valid
   ]);
   return value;
 }
+
+export async function password(message: string) {
+  const { value } = await inquirer.prompt<{ value: string }>([
+    {
+      type: 'password',
+      name: 'value',
+      message,
+      mask: '*',
+      validate: (input: string) => (input.length > 0 ? true : 'Value is required'),
+    },
+  ]);
+  return value;
+}

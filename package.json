@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "type": "module",
   "description": "CLI for authenticating with Autodisc and deploying projects to Autodisc hosting",
+  "keywords": [
+    "autodisc",
+    "deployment",
+    "hosting",
+    "devops",
+    "cli"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -11,9 +18,15 @@
   "bugs": {
     "url": "https://github.com/AutoDisc/autodisc-cli/issues"
   },
-  "homepage": "https://autodisc.xyz/docs",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "homepage": "https://docs.autodisc.xyz",
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
   "bin": {
     "autodisc": "dist/index.js"
   },
@@ -21,8 +34,11 @@
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "README.md"
   ],
+  "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rimraf dist",
@@ -50,13 +66,9 @@
   },
   "devDependencies": {
     "@types/archiver": "^6.0.1",
-    "@types/boxen": "^3.0.5",
-    "@types/conf": "^3.0.3",
-    "@types/form-data": "^2.5.1",
     "@types/inquirer": "^9.0.7",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.1",
-    "@types/ora": "^3.0.7",
     "rimraf": "^6.0.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
@@ -66,6 +78,6 @@
     "node": ">=18"
   },
   "overrides": {
-    "tmp": ">=0.2.4"
+    "tmp": ">=0.2.6"
   }
 }

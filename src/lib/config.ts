@@ -12,6 +12,7 @@ const DEFAULT_CONFIG: CLIConfig = {
     timeout: DEFAULT_TIMEOUT,
   },
   deploy: {
+    currentProject: null,
     currentServer: null,
     defaultPlan: 'builder',
     autoConfirm: false,
@@ -22,7 +23,7 @@ const DEFAULT_CONFIG: CLIConfig = {
     verbose: Boolean(process.env.AUTODISC_DEBUG),
   },
   telemetry: {
-    enabled: true,
+    enabled: false,
   },
 };
 
@@ -65,6 +66,11 @@ export class ConfigManager {
       api: {
         ...this.store.store.api,
         url: process.env.AUTODISC_API_URL || this.store.store.api.url,
+      },
+      ui: {
+        ...this.store.store.ui,
+        colors: process.env.AUTODISC_NO_COLOR === '1' ? false : this.store.store.ui.colors,
+        verbose: Boolean(process.env.AUTODISC_DEBUG) || this.store.store.ui.verbose,
       },
     };
   }
@@ -118,7 +124,10 @@ export class ConfigManager {
 
     const clone: CLIConfig = JSON.parse(JSON.stringify(this.store.store));
     if (clone.auth?.token) {
-      clone.auth.token = `${clone.auth.token.slice(0, 4)}…${clone.auth.token.slice(-4)}`;
+      clone.auth.token = '[redacted]';
+    }
+    if (clone.auth?.refreshToken) {
+      clone.auth.refreshToken = '[redacted]';
     }
     return clone;
   }

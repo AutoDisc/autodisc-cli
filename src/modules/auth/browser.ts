@@ -8,8 +8,8 @@ import { createSpinner } from '../../lib/spinner.js';
 import { logger } from '../../lib/logger.js';
 import { getConfigManager } from '../../lib/config.js';
 import { LOGIN_TIMEOUT_MS } from '../../lib/constants.js';
-import type { BrowserCallbackPayload, User } from '../../types.js';
-import { saveSession } from './session.js';
+import type { BrowserCallbackPayload, SessionIdentityResponse } from '../../types.js';
+import { normalizeUser, saveSession } from './session.js';
 
 const CALLBACK_PATH = '/callback';
 
@@ -112,9 +112,9 @@ export async function runBrowserLogin() {
 
   try {
     const client = createHttpClient({ token: payload.token });
-    const { data: user } = await client.get<User>('/auth/me');
+    const { data } = await client.get<SessionIdentityResponse>('/auth/me');
     spinner.succeed();
-    saveSession(payload.token, user, payload.expiresIn, payload.refreshToken);
+    saveSession(payload.token, normalizeUser(data), payload.expiresIn, payload.refreshToken);
   } catch (error) {
     spinner.fail();
     throw new Error(extractAxiosError(error));

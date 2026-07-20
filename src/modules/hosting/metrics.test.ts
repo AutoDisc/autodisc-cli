@@ -7,6 +7,12 @@ const loggerInfo = vi.fn();
 const loggerWarn = vi.fn();
 
 vi.mock('../../lib/hosting.js', () => ({
+  redactServerEnvironment: (server: { environment?: Record<string, string> }) => ({
+    ...server,
+    environment: server.environment
+      ? Object.fromEntries(Object.keys(server.environment).map((key) => [key, '[hidden]']))
+      : undefined,
+  }),
   HostingAPI: class {
     getServer = (...args: unknown[]) => getServer(...args);
     fetchStats = (...args: unknown[]) => fetchStats(...args);

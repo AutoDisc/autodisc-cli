@@ -1,5 +1,6 @@
 import util from 'node:util';
 import type { Command } from 'commander';
+import { runCommand } from '../../lib/command.js';
 import { getConfigManager } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
 
@@ -60,15 +61,12 @@ export function registerConfigCommands(program: Command) {
     .option('--json', 'Parse the value as JSON')
     .option('--boolean', 'Treat the value as boolean (true/false/1/0)')
     .option('--number', 'Treat the value as a number')
-    .action((path: string, value: string, options: { json?: boolean; boolean?: boolean; number?: boolean }) => {
-      try {
+    .action(async (path: string, value: string, options: { json?: boolean; boolean?: boolean; number?: boolean }) => {
+      await runCommand(() => {
         const parsed = parseInputValue(value, options);
         const config = getConfigManager();
         config.setValue(path, parsed);
         logger.success(`Updated ${path}`);
-      } catch (error) {
-        logger.error((error as Error).message);
-        process.exitCode = 1;
-      }
+      });
     });
 }

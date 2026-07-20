@@ -1,18 +1,16 @@
 #!/usr/bin/env node
-import { logger } from './lib/logger.js';
 import { createProgram } from './cli.js';
+import { reportCommandError } from './lib/command.js';
 
 process.on('unhandledRejection', (reason) => {
-  logger.error('Unhandled rejection', reason);
-  process.exitCode = 1;
+  reportCommandError(reason);
 });
 
 async function main() {
   try {
     await createProgram().parseAsync(process.argv);
   } catch (error) {
-    logger.error((error as Error).message);
-    process.exitCode = 1;
+    reportCommandError(error);
   }
 }
 

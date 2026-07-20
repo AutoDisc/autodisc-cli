@@ -12,7 +12,29 @@ import { DeployConfig } from '../../types.js';
 export interface DeployCommandOptions {
   config?: string;
   path?: string;
+  project?: string;
   start?: boolean;
+}
+
+async function resolveProject(hosting: HostingAPI, selector: string | undefined, fallbackName: string) {
+  const projects = await hosting.listProjects();
+  const requested = selector?.trim();
+  const matches = projects.filter((project) =>
+    requested
+      ? [project.id, project.slug, project.name].includes(requested)
+      : project.name === fallbackName
+  );
+
+  if (matches.length > 1) {
+    throw new Error(`Multiple projects match "${requested ?? fallbackName}". Pass --project with an exact project ID.`);
+  }
+  if (matches[0]) return matches[0];
+  if (requested) {
+    throw new Error(`Project "${requested}" was not found.`);
+  }
+
+  logger.info(`Creating project ${fallbackName}`);
+  return hosting.createProject(fallbackName);
 }
 
 export async function deploy(options: DeployCommandOptions) {
@@ -72,6 +94,10 @@ export async function deploy(options: DeployCommandOptions) {
     throw new Error('source.repo_full_name is required for repo deployments');
   }
 
+  const publicPort = deployConfig.runtime.port;
+  const isPublic = publicPort !== undefined && deployConfig.deployment.public !== false;
+  const setupCommand = deployConfig.runtime.build_steps?.filter(Boolean).join(' && ') || undefined;
+
   const payload: UpsertServerPayload = {
     name: deployConfig.name,
     source_type: deployConfig.source.type,
@@ -80,19 +106,84 @@ export async function deploy(options: DeployCommandOptions) {
     source_upload_key: uploadKey,
     source_upload_name: uploadName,
     start_command: deployConfig.runtime.start_command,
+    setup_command: setupCommand,
     plan_type: deployConfig.deployment.plan_type,
     environment: deployConfig.environment ?? {},
     auto_restart: deployConfig.deployment.auto_restart ?? true,
+    service_type: 'app',
+    port: publicPort,
+    internal: deployConfig.deployment.public === false,
   };
 
-  const upsertSpinner = createSpinner('Creating hosting server');
-  upsertSpinner.start();
-  try {
-    await hosting.upsertServer(payload);
-    upsertSpinner.succeed();
-  } catch (error) {
-    upsertSpinner.fail();
-    throw error;
+  const project = await resolveProject(hosting, options.project, deployConfig.name);
+  const hydratedProject = await hosting.getProject(project.id);
+  let server = hydratedProject.services.find((service) => service.name === deployConfig.name);
+  const serviceAlreadyExisted = Boolean(server);
+
+  if (!server) {
+    const upsertSpinner = createSpinner('Creating project service');
+    upsertSpinner.start();
+    try {
+      server = await hosting.addProjectService(
+        project.id,
+        payload,
+        hydratedProject.default_environment_id,
+      );
+      upsertSpinner.succeed();
+    } catch (error) {
+      upsertSpinner.fail();
+      throw error;
+    }
+  }
+
+  const cliConfig = (await import('../../lib/config.js')).getConfigManager();
+  cliConfig.setValue('deploy.currentProject', project.id);
+  cliConfig.setValue('deploy.currentServer', server.id);
+
+  if (serviceAlreadyExisted) {
+    server = await hosting.updateServer(server.id, {
+      name: deployConfig.name,
+      ...(deployConfig.source.type === 'repo'
+        ? {
+            source_type: 'repo' as const,
+            repo_full_name: deployConfig.source.repo_full_name,
+            repo_branch: deployConfig.source.repo_branch,
+          }
+        : {}),
+      start_command: deployConfig.runtime.start_command,
+      setup_command: setupCommand,
+      detected_stack: deployConfig.runtime.stack,
+      port: publicPort,
+      internal: deployConfig.deployment.public === false,
+      show_url: isPublic,
+      environment: deployConfig.environment
+        ? { ...(server.environment ?? {}), ...deployConfig.environment }
+        : undefined,
+      auto_restart: deployConfig.deployment.auto_restart ?? true,
+    });
+  }
+
+  if (deployConfig.source.type === 'upload' && uploadKey) {
+    const deploySpinner = createSpinner(options.start === false ? 'Applying deployment bundle' : 'Deploying project');
+    deploySpinner.start();
+    try {
+      server = await hosting.deployBundle(server.id, {
+        upload_key: uploadKey,
+        upload_name: uploadName,
+        start_command: deployConfig.runtime.start_command,
+        setup_command: setupCommand,
+        detected_stack: deployConfig.runtime.stack,
+        environment: deployConfig.environment
+          ? { ...(server.environment ?? {}), ...deployConfig.environment }
+          : undefined,
+        auto_restart: deployConfig.deployment.auto_restart ?? true,
+        start: options.start !== false,
+      });
+      deploySpinner.succeed();
+    } catch (error) {
+      deploySpinner.fail();
+      throw error;
+    }
   }
 
   if (options.start === false) {
@@ -108,16 +199,20 @@ export async function deploy(options: DeployCommandOptions) {
     return;
   }
 
-  const startSpinner = createSpinner('Starting hosting server');
-  startSpinner.start();
-  try {
-    const server = await hosting.startServer();
-    startSpinner.succeed();
-    logger.success(`Deployment started: ${server.name} (${chalk.cyan(server.status)})`);
-  } catch (error) {
-    startSpinner.fail();
-    throw error;
+  const startSpinner = createSpinner('Deploying project');
+  if (deployConfig.source.type === 'repo') {
+    startSpinner.start();
+    try {
+      server = serviceAlreadyExisted
+        ? await hosting.redeployServer(server.id)
+        : await hosting.startServer(server.id);
+      startSpinner.succeed();
+    } catch (error) {
+      startSpinner.fail();
+      throw error;
+    }
   }
+  logger.success(`Deployment started: ${server.name} (${chalk.cyan(server.status ?? 'queued')})`);
 
   // Offer to save auto-generated config for future deploys
   if (wasAutoGenerated) {

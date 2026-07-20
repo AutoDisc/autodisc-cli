@@ -2,12 +2,20 @@ import axios from 'axios';
 import { createHttpClient, extractAxiosError } from '../../lib/http.js';
 import { getConfigManager } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
-import { AuthSession, RefreshSessionResponse, User } from '../../types.js';
+import { AuthSession, RefreshSessionResponse, SessionIdentityResponse, User } from '../../types.js';
 
 const EXPIRY_SKEW_MS = 60_000;
 const DEFAULT_LOGIN_MESSAGE = 'Not authenticated. Please run "autodisc login".';
 
 let refreshPromise: Promise<AuthSession> | null = null;
+
+export function normalizeUser(payload: User | SessionIdentityResponse): User {
+  const candidate = 'user' in payload ? payload.user : payload;
+  if (!candidate || typeof candidate.id !== 'string' || typeof candidate.email !== 'string') {
+    throw new Error('Autodisc returned an invalid account identity. Please update the CLI and try again.');
+  }
+  return candidate;
+}
 
 function computeExpiry(expiresIn?: number) {
   if (!expiresIn) return undefined;
@@ -75,6 +83,14 @@ async function refreshSession(session: AuthSession, message: string) {
   }
 
   return refreshPromise;
+}
+
+export async function refreshAuthenticatedSession(message = DEFAULT_LOGIN_MESSAGE) {
+  const session = getSession();
+  if (!session?.token || !session.refreshToken) {
+    throw new Error(message);
+  }
+  return refreshSession(session, message);
 }
 
 export async function ensureAuthenticated(message = DEFAULT_LOGIN_MESSAGE) {

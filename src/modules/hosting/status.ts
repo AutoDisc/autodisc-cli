@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { HostingAPI } from '../../lib/hosting.js';
+import { HostingAPI, redactServerEnvironment } from '../../lib/hosting.js';
 import { logger } from '../../lib/logger.js';
 
 export interface StatusOptions {
@@ -23,7 +23,7 @@ export async function showStatus(options: StatusOptions = {}) {
   }
 
   if (options.json) {
-    printJson({ server });
+    printJson({ server: redactServerEnvironment(server) });
     return;
   }
 
@@ -39,6 +39,6 @@ export async function showStatus(options: StatusOptions = {}) {
   }
   if (server.environment && Object.keys(server.environment).length > 0) {
     logger.info('Environment:');
-    Object.entries(server.environment).forEach(([key, value]) => logger.info(`  ${key}=${value}`));
+    Object.keys(server.environment).forEach((key) => logger.info(`  ${key}=[hidden]`));
   }
 }

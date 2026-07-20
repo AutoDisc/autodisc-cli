@@ -4,8 +4,11 @@ import chalk from 'chalk';
 import { HostingAPI } from '../../lib/hosting.js';
 import { createSpinner } from '../../lib/spinner.js';
 import { logger } from '../../lib/logger.js';
+import { password } from '../../lib/prompts.js';
 
-function formatEnv(env: Record<string, string>) {
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function formatEnv(env: Record<string, string>, showValues = false) {
   const entries = Object.entries(env);
   if (!entries.length) {
     logger.info(chalk.gray('No environment variables configured.'));
@@ -14,7 +17,7 @@ function formatEnv(env: Record<string, string>) {
   entries
     .sort(([a], [b]) => a.localeCompare(b))
     .forEach(([key, value]) => {
-      logger.info(`${chalk.cyan(key)}=${value}`);
+      logger.info(`${chalk.cyan(key)}=${showValues ? value : '[hidden]'}`);
     });
 }
 
@@ -23,7 +26,11 @@ function parseKeyValue(pair: string) {
   if (!key || !rest.length) {
     throw new Error(`Invalid KEY=VALUE pair: ${pair}`);
   }
-  return { key: key.trim(), value: rest.join('=').trim() };
+  const normalizedKey = key.trim();
+  if (!ENV_KEY_PATTERN.test(normalizedKey)) {
+    throw new Error(`Invalid environment variable name: ${normalizedKey}`);
+  }
+  return { key: normalizedKey, value: rest.join('=').trim() };
 }
 
 function parseDotEnv(content: string) {
@@ -50,14 +57,19 @@ function serializeEnv(env: Record<string, string>) {
     .join('\n');
 }
 
-export async function listEnv() {
+export async function listEnv(options: { showValues?: boolean; json?: boolean } = {}) {
   const hosting = new HostingAPI();
   const spinner = createSpinner('Fetching environment variables');
   spinner.start();
   try {
     const env = await hosting.getEnvironment();
     spinner.stop();
-    formatEnv(env);
+    if (options.json) {
+      const output = options.showValues ? env : Object.keys(env).sort();
+      process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+    } else {
+      formatEnv(env, options.showValues);
+    }
   } catch (error) {
     spinner.fail();
     throw error;
@@ -73,10 +85,14 @@ export async function setEnv(pairs: string[]) {
   spinner.start();
   try {
     const current = await hosting.getEnvironment();
-    pairs.forEach((pair) => {
-      const { key, value } = parseKeyValue(pair);
+    for (const pair of pairs) {
+      const parsed = pair.includes('=')
+        ? parseKeyValue(pair)
+        : { key: pair.trim(), value: await password(`Enter value for ${pair.trim()}:`) };
+      const { key, value } = parsed;
+      if (!ENV_KEY_PATTERN.test(key)) throw new Error(`Invalid environment variable name: ${key}`);
       current[key] = value;
-    });
+    }
     await hosting.updateEnvironment(current);
     spinner.succeed();
     logger.success('Environment updated');

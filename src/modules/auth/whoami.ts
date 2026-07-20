@@ -1,8 +1,8 @@
 import { createHttpClient, extractAxiosError } from '../../lib/http.js';
 import { logger } from '../../lib/logger.js';
 import { createSpinner } from '../../lib/spinner.js';
-import { getSession, requireSession, saveSession } from './session.js';
-import type { User } from '../../types.js';
+import { getSession, normalizeUser, requireSession, saveSession } from './session.js';
+import type { SessionIdentityResponse } from '../../types.js';
 
 export async function whoAmI() {
   const session = await requireSession();
@@ -16,7 +16,8 @@ export async function whoAmI() {
   spinner.start();
   try {
     const client = createHttpClient();
-    const { data: user } = await client.get<User>('/auth/me');
+    const { data } = await client.get<SessionIdentityResponse>('/auth/me');
+    const user = normalizeUser(data);
     spinner.succeed();
     saveSession(session.token, user);
     logger.success(`You are logged in as ${user.email}`);

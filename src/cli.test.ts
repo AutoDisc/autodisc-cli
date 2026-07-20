@@ -20,7 +20,7 @@ describe('createProgram', () => {
     const program = createProgram();
 
     expect(program.name()).toBe('autodisc');
-    expect(program.description()).toContain('Autodisc CLI');
+    expect(program.description()).toContain('Deploy and manage');
 
     const commandNames = program.commands.map((command) => command.name());
     expect(commandNames).toEqual([
@@ -40,7 +40,18 @@ describe('createProgram', () => {
       'restart',
       'delete',
       'env',
+      'agent:setup',
+      'agent:chat',
+      'project',
+      'doctor',
     ]);
+  });
+
+  it('exposes consistent global troubleshooting options', () => {
+    const program = createProgram();
+    const optionNames = program.options.map((option) => option.long);
+
+    expect(optionNames).toEqual(expect.arrayContaining(['--api-url', '--verbose', '--no-color']));
   });
 
   it('registers the hosting env subcommands exposed by Autodisc', () => {

@@ -6,6 +6,24 @@ export interface User {
   name?: string | null;
 }
 
+export interface SessionIdentityResponse {
+  user: User;
+  principal?: {
+    id: string;
+    type: string;
+    is_platform_admin?: boolean;
+  };
+  accounts?: Array<{
+    id: string;
+    name: string;
+    slug?: string | null;
+    type?: string;
+    roles?: string[];
+    permissions?: string[];
+  }>;
+  active_account_id?: string | null;
+}
+
 export interface AuthSession {
   token: string;
   refreshToken?: string;
@@ -21,6 +39,7 @@ export interface CLIConfig {
     timeout: number;
   };
   deploy: {
+    currentProject?: string | null;
     currentServer?: string | null;
     defaultPlan: PlanType;
     autoConfirm: boolean;
@@ -78,6 +97,7 @@ export interface DeployConfig {
   runtime: {
     stack?: 'auto' | 'node' | 'python' | 'dockerfile';
     start_command?: string;
+    port?: number;
     image?: string;
     dockerfile?: string;
     workdir?: string;
@@ -86,8 +106,15 @@ export interface DeployConfig {
   deployment: {
     plan_type: PlanType;
     auto_restart?: boolean;
+    public?: boolean;
   };
   environment?: Record<string, string>;
+  slug?: string;
+  show_url?: boolean;
+  port?: number;
+  internal?: boolean;
+  runner_instance_id?: string;
+  container_id?: string;
   secrets?: string[];
   ignore?: string[];
 }
@@ -121,6 +148,7 @@ export interface HostingProjectResponse {
   user_id: string;
   name: string;
   slug: string;
+  default_environment_id?: string | null;
   services: HostingServerResponse[];
   created_at?: string;
   updated_at?: string;

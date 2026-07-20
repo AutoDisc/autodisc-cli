@@ -1,8 +1,8 @@
 import { createHttpClient, extractAxiosError } from '../../lib/http.js';
 import { createSpinner } from '../../lib/spinner.js';
 import { input } from '../../lib/prompts.js';
-import { saveSession } from './session.js';
-import type { User } from '../../types.js';
+import { normalizeUser, saveSession } from './session.js';
+import type { SessionIdentityResponse } from '../../types.js';
 
 function normalizeToken(raw?: string | boolean): string {
   if (typeof raw === 'string' && raw.trim()) {
@@ -23,9 +23,9 @@ export async function runApiTokenLogin(provided?: string | boolean) {
   spinner.start();
   try {
     const client = createHttpClient({ token });
-    const { data: user } = await client.get<User>('/auth/me');
+    const { data } = await client.get<SessionIdentityResponse>('/auth/me');
     spinner.succeed();
-    saveSession(token, user);
+    saveSession(token, normalizeUser(data));
   } catch (error) {
     spinner.fail();
     throw new Error(extractAxiosError(error));

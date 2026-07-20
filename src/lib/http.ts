@@ -13,6 +13,10 @@ interface ClientOptions {
   includeAuth?: boolean;
 }
 
+interface RetryableRequestConfig extends AxiosRequestConfig {
+  _autodiscAuthRetried?: boolean;
+}
+
 export function createHttpClient(options?: ClientOptions): AxiosInstance {
   const configManager = getConfigManager();
   const token = options?.token ?? null;
@@ -57,8 +61,23 @@ export function createHttpClient(options?: ClientOptions): AxiosInstance {
       }
       return response;
     },
-    (error: AxiosError) => {
+    async (error: AxiosError) => {
       if (error.response?.status === 401 && includeAuth) {
+        const requestConfig = error.config as RetryableRequestConfig | undefined;
+        if (!token && !process.env.AUTODISC_TOKEN && requestConfig && !requestConfig._autodiscAuthRetried) {
+          requestConfig._autodiscAuthRetried = true;
+          try {
+            const { refreshAuthenticatedSession } = await import('../modules/auth/session.js');
+            const refreshed = await refreshAuthenticatedSession();
+            requestConfig.headers = requestConfig.headers || {};
+            requestConfig.headers.Authorization = `Bearer ${refreshed.token}`;
+            return instance.request(requestConfig);
+          } catch (refreshError) {
+            if (getConfigManager().getAuth()) throw refreshError;
+            // An invalid refresh clears the stored session; fall through to the
+            // stable login instruction in that case.
+          }
+        }
         throw new Error('Authentication failed. Please run "autodisc login".');
       }
       return Promise.reject(error);
@@ -70,9 +89,19 @@ export function createHttpClient(options?: ClientOptions): AxiosInstance {
 
 export function extractAxiosError(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const err = error as AxiosError<{ detail?: string; message?: string }>;
-    const detail = err.response?.data?.detail || err.response?.data?.message;
-    if (detail) return detail;
+    const err = error as AxiosError<{ detail?: string; error?: string; message?: string }>;
+    const detail = err.response?.data?.detail || err.response?.data?.error || err.response?.data?.message;
+    if (detail) {
+      if (typeof detail === 'string' && detail.trim().startsWith('{')) {
+        try {
+          const nested = JSON.parse(detail) as { detail?: string; error?: string; message?: string };
+          return nested.detail || nested.error || nested.message || detail;
+        } catch {
+          return detail;
+        }
+      }
+      return detail;
+    }
     if (err.response) return `Request failed with status ${err.response.status}`;
     if (err.request) return 'No response received from server';
     return err.message;

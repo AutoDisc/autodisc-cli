@@ -1,4 +1,4 @@
-import type { Command } from 'commander';
+import { Option, type Command } from 'commander';
 import { runCommand } from '../../lib/command.js';
 
 export function registerAuthCommands(program: Command) {
@@ -7,7 +7,9 @@ export function registerAuthCommands(program: Command) {
     .description('Authenticate with Autodisc')
     .option('--token [token]', 'Provide an Autodisc API token (skips interactive flows)')
     .option('--browser', 'Authenticate via browser sign-in flow (default)')
-    .option('--device', 'Authenticate via device code flow')
+    // Keep the flag for forward compatibility and existing callers, but do not
+    // advertise a flow that the production API does not currently expose.
+    .addOption(new Option('--device', 'Authenticate via device code flow').hideHelp())
     .action(async (options: { token?: string | boolean; browser?: boolean; device?: boolean }) => {
       await runCommand(async () => {
         const { login } = await import('./login.js');

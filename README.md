@@ -16,6 +16,9 @@ npm install --global @autodisc/cli
 
 The package installs the `autodisc` command.
 
+If you are using the CLI rather than contributing to it, install the npm package;
+you do not need to clone or build this repository.
+
 ## Quick start
 
 ```bash
@@ -26,6 +29,20 @@ autodisc deploy
 ```
 
 `autodisc init` analyzes the current project and creates `autodisc.yml`. Review the generated configuration, then run `autodisc deploy` to create or update the service.
+
+`autodisc login` uses browser authentication. For automation, use
+`autodisc login --token <token>` or set `AUTODISC_TOKEN`.
+
+Deployments start asynchronously. Follow progress with:
+
+```bash
+autodisc status
+autodisc logs --follow
+```
+
+If a start or deploy command reports a gateway, origin, or timeout error, the
+backend may still have accepted the request. Check `autodisc status` and
+`autodisc logs` before retrying.
 
 For configuration and usage details, visit the [Autodisc documentation](https://docs.autodisc.xyz).
 

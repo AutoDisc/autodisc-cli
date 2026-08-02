@@ -54,6 +54,14 @@ describe('createProgram', () => {
     expect(optionNames).toEqual(expect.arrayContaining(['--api-url', '--verbose', '--no-color']));
   });
 
+  it('does not advertise the unavailable device-code login flow', () => {
+    const program = createProgram();
+    const loginCommand = program.commands.find((command) => command.name() === 'login');
+
+    expect(loginCommand?.helpInformation()).not.toContain('--device');
+    expect(loginCommand?.options.some((option) => option.long === '--device')).toBe(true);
+  });
+
   it('registers the hosting env subcommands exposed by Autodisc', () => {
     const program = createProgram();
     const envCommand = program.commands.find((command) => command.name() === 'env');

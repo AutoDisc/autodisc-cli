@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import FormData from 'form-data';
 import fs from 'fs';
@@ -56,10 +57,25 @@ export function redactServerEnvironment(server: HostingServerResponse): HostingS
   };
 }
 
+function isAmbiguousMutationError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status;
+  return !error.response || (status !== undefined && status >= 500);
+}
+
+function mutationError(operation: string, error: unknown): Error {
+  const message = extractAxiosError(error);
+  if (!isAmbiguousMutationError(error)) return new Error(message);
+  return new Error(
+    `Autodisc could not confirm whether the ${operation} request completed (${message}). ` +
+    'Run "autodisc status" before retrying; use "autodisc logs" for deployment details.'
+  );
+}
+
 export class HostingAPI {
   private client = createHttpClient();
 
-  private async actionWithRetry<T>(request: () => Promise<{ data: T }>): Promise<T> {
+  private async idempotentActionWithRetry<T>(request: () => Promise<{ data: T }>): Promise<T> {
     let lastError: unknown;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
@@ -104,37 +120,43 @@ export class HostingAPI {
 
   async startServer(serverId = this.configuredServerId()): Promise<HostingServerResponse> {
     try {
-      return await this.actionWithRetry(() => this.client.post<HostingServerResponse>(
+      const { data } = await this.client.post<HostingServerResponse>(
         '/hosting/server/start',
         undefined,
         { params: serverId ? { server_id: serverId } : undefined }
-      ));
+      );
+      return data;
     } catch (error) {
-      throw new Error(extractAxiosError(error));
+      throw mutationError('start', error);
     }
   }
 
   async stopServer(serverId = this.configuredServerId()): Promise<HostingServerResponse> {
     try {
-      return await this.actionWithRetry(() => this.client.post<HostingServerResponse>(
+      const { data } = await this.client.post<HostingServerResponse>(
         '/hosting/server/stop',
         undefined,
         { params: serverId ? { server_id: serverId } : undefined }
-      ));
+      );
+      return data;
     } catch (error) {
-      throw new Error(extractAxiosError(error));
+      throw mutationError('stop', error);
     }
   }
 
   async redeployServer(serverId = this.configuredServerId()): Promise<HostingServerResponse> {
+    const idempotencyKey = randomUUID();
     try {
-      return await this.actionWithRetry(() => this.client.post<HostingServerResponse>(
+      return await this.idempotentActionWithRetry(() => this.client.post<HostingServerResponse>(
         '/hosting/server/redeploy',
         undefined,
-        { params: serverId ? { server_id: serverId } : undefined }
+        {
+          params: serverId ? { server_id: serverId } : undefined,
+          headers: { 'Idempotency-Key': idempotencyKey },
+        }
       ));
     } catch (error) {
-      throw new Error(extractAxiosError(error));
+      throw mutationError('redeploy', error);
     }
   }
 
@@ -359,13 +381,14 @@ export class HostingAPI {
 
   async deployBundle(serverId: string, payload: DeployBundlePayload): Promise<HostingServerResponse> {
     try {
-      return await this.actionWithRetry(() => this.client.post<HostingServerResponse>(
+      const { data } = await this.client.post<HostingServerResponse>(
         '/hosting/server/deploy',
         payload,
         { params: { server_id: serverId } }
-      ));
+      );
+      return data;
     } catch (error) {
-      throw new Error(extractAxiosError(error));
+      throw mutationError('deployment', error);
     }
   }
 }

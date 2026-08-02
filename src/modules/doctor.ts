@@ -21,6 +21,11 @@ export interface DoctorOptions {
 
 const MINIMUM_NODE_MAJOR = 18;
 
+interface ApiStatusResponse {
+  status?: string;
+  services?: Array<{ name?: string; status?: string }>;
+}
+
 export function checkNodeVersion(version = process.versions.node): DoctorCheck {
   const major = Number(version.split('.')[0]);
   const supported = Number.isInteger(major) && major >= MINIMUM_NODE_MAJOR;
@@ -88,15 +93,47 @@ function checkProjectConfig(projectRoot: string): DoctorCheck {
   }
 }
 
+export function checkApiStatus(data: ApiStatusResponse): DoctorCheck {
+  const status = data.status?.trim().toLowerCase();
+  const affectedServices = data.services
+    ?.filter((service) => service.status && service.status.toLowerCase() !== 'operational')
+    .map((service) => `${service.name ?? 'Unknown'}=${service.status}`)
+    .join(', ');
+  const detail = affectedServices ? `; ${affectedServices}` : '';
+
+  if (status === 'outage') {
+    return {
+      name: 'API connection',
+      status: 'fail',
+      message: `reachable, but Autodisc reports an outage${detail}`,
+    };
+  }
+  if (status === 'degraded') {
+    return {
+      name: 'API connection',
+      status: 'warn',
+      message: `reachable, but Autodisc reports degraded service${detail}`,
+    };
+  }
+  if (status && status !== 'operational') {
+    return {
+      name: 'API connection',
+      status: 'warn',
+      message: `reachable (unrecognized platform status: ${data.status})`,
+    };
+  }
+  return {
+    name: 'API connection',
+    status: 'pass',
+    message: `reachable${data.status ? ` (${data.status})` : ''}`,
+  };
+}
+
 async function checkApiConnection(): Promise<DoctorCheck> {
   try {
     const client = createHttpClient({ includeAuth: false });
-    const response = await client.get<{ status?: string }>('/status', { timeout: 5_000 });
-    return {
-      name: 'API connection',
-      status: 'pass',
-      message: `reachable${response.data.status ? ` (${response.data.status})` : ''}`,
-    };
+    const response = await client.get<ApiStatusResponse>('/status', { timeout: 5_000 });
+    return checkApiStatus(response.data);
   } catch (error) {
     return {
       name: 'API connection',

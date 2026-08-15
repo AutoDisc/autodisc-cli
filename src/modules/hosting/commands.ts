@@ -20,8 +20,10 @@ export function registerHostingCommands(program: Command) {
     .option('-c, --config <path>', 'Path to autodisc.yml (default: autodetected)')
     .option('-p, --path <dir>', 'Project directory to deploy (default: cwd)')
     .option('--project <id-or-name>', 'Deploy into an existing Autodisc project')
+    .option('--anonymous', 'Deploy for 24 hours without signing in and print a claim link')
+    .option('--json', 'Print the anonymous deployment response as JSON')
     .option('--no-start', 'Skip automatic start after upsert')
-    .action(async (options: { config?: string; path?: string; project?: string; start?: boolean }) => {
+    .action(async (options: { config?: string; path?: string; project?: string; start?: boolean; anonymous?: boolean; json?: boolean }) => {
       await runCommand(async () => {
         const { deploy } = await import('./deploy.js');
         await deploy(options);

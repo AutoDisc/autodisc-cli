@@ -40,6 +40,46 @@ autodisc status
 autodisc logs --follow
 ```
 
+## Deploy without an account
+
+Create a 24-hour anonymous deployment and receive a private claim link without
+running `autodisc login`:
+
+```bash
+autodisc deploy --anonymous
+```
+
+Agents can request a machine-readable response containing the deployment URL,
+expiration, status endpoint, control token, and claim URL:
+
+```bash
+autodisc deploy --anonymous --json
+```
+
+The CLI is optional. Any agent or HTTP client can deploy a public GitHub
+repository directly:
+
+```bash
+curl https://api.autodisc.xyz/api/v1/drops \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "my-project",
+    "source": {
+      "kind": "github",
+      "url": "https://github.com/example/my-project",
+      "ref": "main"
+    },
+    "lifetime_hours": 24,
+    "requested_mode": "auto"
+  }'
+```
+
+ZIP uploads use `POST /api/v1/drops/upload` with the archive in the `source`
+multipart field and deployment options as JSON in the `request` field. Creation
+requires no Autodisc credential. Treat the returned control token and claim URL
+as secrets.
+
 If a start or deploy command reports a gateway, origin, or timeout error, the
 backend may still have accepted the request. Check `autodisc status` and
 `autodisc logs` before retrying.

@@ -88,6 +88,18 @@ describe('registerHostingCommands', () => {
     });
   });
 
+  it('exposes an auth-free, machine-readable deployment mode', async () => {
+    const program = createProgram();
+
+    await program.parseAsync(['node', 'autodisc', 'deploy', '--anonymous', '--json']);
+
+    expect(deploy).toHaveBeenCalledWith({
+      anonymous: true,
+      json: true,
+      start: true,
+    });
+  });
+
   it('normalizes log options before calling the logs module', async () => {
     const program = createProgram();
 

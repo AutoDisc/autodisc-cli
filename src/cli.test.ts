@@ -43,6 +43,7 @@ describe('createProgram', () => {
       'agent:setup',
       'agent:chat',
       'project',
+      'servers',
       'doctor',
     ]);
   });

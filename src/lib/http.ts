@@ -7,21 +7,36 @@ import axios, {
 import { getConfigManager } from './config.js';
 import { API_BASE_PATH } from './constants.js';
 import pkg from '../../package.json' with { type: 'json' };
+import type { AuthCredentialType } from '../types.js';
+import {
+  credentialHeaders,
+  credentialTypeForToken,
+  environmentCredential,
+} from '../modules/auth/credential.js';
 
 interface ClientOptions {
   token?: string | null;
+  credentialType?: AuthCredentialType;
   includeAuth?: boolean;
+  publicApi?: boolean;
 }
 
 interface RetryableRequestConfig extends AxiosRequestConfig {
   _autodiscAuthRetried?: boolean;
+  _autodiscCredentialType?: AuthCredentialType;
 }
 
 export function createHttpClient(options?: ClientOptions): AxiosInstance {
   const configManager = getConfigManager();
   const token = options?.token ?? null;
+  const initialCredential = token
+    ? { token, credentialType: credentialTypeForToken(token, options?.credentialType) }
+    : environmentCredential() ?? configManager.getAuth();
   const includeAuth = options?.includeAuth ?? true;
-  const baseURL = `${configManager.getApiUrl()}${API_BASE_PATH}`;
+  const apiUrl = options?.publicApi || initialCredential?.credentialType === 'api_key'
+    ? configManager.getPublicApiUrl()
+    : configManager.getApiUrl();
+  const baseURL = `${apiUrl}${API_BASE_PATH}`;
 
   const instance = axios.create({
     baseURL,
@@ -32,18 +47,24 @@ export function createHttpClient(options?: ClientOptions): AxiosInstance {
   });
 
   instance.interceptors.request.use(async (config) => {
-    let authToken = token;
-    if (includeAuth && !authToken) {
-      if (process.env.AUTODISC_TOKEN) {
-        authToken = process.env.AUTODISC_TOKEN;
-      } else {
-        const { ensureAuthenticated } = await import('../modules/auth/session.js');
-        authToken = (await ensureAuthenticated()).token;
-      }
+    let credential = token
+      ? { token, credentialType: credentialTypeForToken(token, options?.credentialType) }
+      : environmentCredential();
+    if (includeAuth && !credential) {
+      const { ensureAuthenticated } = await import('../modules/auth/session.js');
+      const session = await ensureAuthenticated();
+      credential = {
+        token: session.token,
+        credentialType: credentialTypeForToken(session.token, session.credentialType),
+      };
     }
-    if (includeAuth && authToken) {
+    if (includeAuth && credential) {
       config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${authToken}`;
+      Object.assign(
+        config.headers,
+        credentialHeaders(credential.token, credential.credentialType),
+      );
+      (config as RetryableRequestConfig)._autodiscCredentialType = credential.credentialType;
     }
     return config;
   });
@@ -64,7 +85,12 @@ export function createHttpClient(options?: ClientOptions): AxiosInstance {
     async (error: AxiosError) => {
       if (error.response?.status === 401 && includeAuth) {
         const requestConfig = error.config as RetryableRequestConfig | undefined;
-        if (!token && !process.env.AUTODISC_TOKEN && requestConfig && !requestConfig._autodiscAuthRetried) {
+        if (
+          requestConfig?._autodiscCredentialType === 'api_key'
+        ) {
+          throw new Error('API key rejected. Create a new key under Account → Tokens and try again.');
+        }
+        if (!token && !environmentCredential() && requestConfig && !requestConfig._autodiscAuthRetried) {
           requestConfig._autodiscAuthRetried = true;
           try {
             const { refreshAuthenticatedSession } = await import('../modules/auth/session.js');

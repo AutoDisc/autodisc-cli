@@ -24,8 +24,11 @@ export interface SessionIdentityResponse {
   active_account_id?: string | null;
 }
 
+export type AuthCredentialType = 'session' | 'api_key';
+
 export interface AuthSession {
   token: string;
+  credentialType?: AuthCredentialType;
   refreshToken?: string;
   user: User;
   expiresAt?: string;

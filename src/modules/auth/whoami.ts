@@ -6,6 +6,20 @@ import type { SessionIdentityResponse } from '../../types.js';
 
 export async function whoAmI() {
   const session = await requireSession();
+  if (session.credentialType === 'api_key') {
+    const spinner = createSpinner('Checking API key');
+    spinner.start();
+    try {
+      await createHttpClient().get('/servers/regions');
+      spinner.succeed();
+      logger.success(`Authenticated with API key ${session.token.slice(0, 12)}…`);
+      return;
+    } catch (error) {
+      spinner.fail();
+      logger.error(extractAxiosError(error));
+      throw error;
+    }
+  }
   if (session.user?.email) {
     logger.info(`Authenticated as ${session.user.email}`);
   } else {

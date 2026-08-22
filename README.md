@@ -31,7 +31,8 @@ autodisc deploy
 `autodisc init` analyzes the current project and creates `autodisc.yml`. Review the generated configuration, then run `autodisc deploy` to create or update the service.
 
 `autodisc login` uses browser authentication. For automation, use
-`autodisc login --token <token>` or set `AUTODISC_TOKEN`.
+`autodisc login --api-key <key>` or set `AUTODISC_API_KEY`. Create API keys
+under **Account → Tokens** and keep them out of shell history.
 
 Deployments start asynchronously. Follow progress with:
 
@@ -83,6 +84,29 @@ as secrets.
 If a start or deploy command reports a gateway, origin, or timeout error, the
 backend may still have accepted the request. Check `autodisc status` and
 `autodisc logs` before retrying.
+
+## Project servers
+
+Inspect the live VPS catalog and provision a server within a project:
+
+```bash
+autodisc servers regions
+autodisc servers shapes
+autodisc servers create preview-api \
+  --project PROJECT_UUID \
+  --region us-west \
+  --shape micro-1 \
+  --storage 20 \
+  --ipv4
+```
+
+Provisioning is quote-first: the CLI displays the exact hourly rate and
+730-hour estimate before submitting the request. Use `--yes --json` for trusted
+automation and provide `--idempotency-key` when a workflow may retry a mutation.
+
+Use `autodisc servers list|get|quote|create` to inspect and provision servers,
+and `autodisc servers start|stop|restart|delete` for lifecycle operations.
+Server commands require a canonical project UUID.
 
 For configuration and usage details, visit the [Autodisc documentation](https://docs.autodisc.xyz).
 

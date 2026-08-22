@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import Conf from 'conf';
 import { CLIConfig, AuthSession } from '../types.js';
-import { CONFIG_FILE, DEFAULT_API_URL } from './constants.js';
+import { CONFIG_FILE, DEFAULT_API_URL, DEFAULT_PUBLIC_API_URL } from './constants.js';
+import { credentialTypeForToken, environmentCredential } from '../modules/auth/credential.js';
 
 const DEFAULT_TIMEOUT = 30_000;
 
@@ -76,7 +77,15 @@ export class ConfigManager {
   }
 
   getToken(): string | undefined {
-    return process.env.AUTODISC_TOKEN || this.store.store.auth?.token;
+    return environmentCredential()?.token || this.store.store.auth?.token;
+  }
+
+  getPublicApiUrl() {
+    return (
+      process.env.AUTODISC_API_URL
+      || process.env.AUTODISC_PUBLIC_API_URL
+      || DEFAULT_PUBLIC_API_URL
+    ).replace(/\/$/, '');
   }
 
   getTimeout() {
@@ -106,6 +115,7 @@ export class ConfigManager {
       this.store.delete('auth');
       return undefined;
     }
+    auth.credentialType = credentialTypeForToken(auth.token, auth.credentialType);
     return auth;
   }
 

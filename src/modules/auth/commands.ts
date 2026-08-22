@@ -5,15 +5,16 @@ export function registerAuthCommands(program: Command) {
   program
     .command('login')
     .description('Authenticate with Autodisc')
-    .option('--token [token]', 'Provide an Autodisc API token (skips interactive flows)')
+    .option('--token [token]', 'Provide a session token or adk_ API key (skips interactive flows)')
+    .option('--api-key [key]', 'Provide an Account → Tokens API key')
     .option('--browser', 'Authenticate via browser sign-in flow (default)')
     // Keep the flag for forward compatibility and existing callers, but do not
     // advertise a flow that the production API does not currently expose.
     .addOption(new Option('--device', 'Authenticate via device code flow').hideHelp())
-    .action(async (options: { token?: string | boolean; browser?: boolean; device?: boolean }) => {
+    .action(async (options: { token?: string | boolean; apiKey?: string | boolean; browser?: boolean; device?: boolean }) => {
       await runCommand(async () => {
         const { login } = await import('./login.js');
-        await login({ token: options.token, browser: Boolean(options.browser), device: Boolean(options.device) });
+        await login({ token: options.apiKey ?? options.token, browser: Boolean(options.browser), device: Boolean(options.device) });
       });
     });
 

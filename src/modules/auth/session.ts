@@ -3,6 +3,8 @@ import { createHttpClient, extractAxiosError } from '../../lib/http.js';
 import { getConfigManager } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
 import { AuthSession, RefreshSessionResponse, SessionIdentityResponse, User } from '../../types.js';
+import type { AuthCredentialType } from '../../types.js';
+import { credentialTypeForToken, environmentCredential } from './credential.js';
 
 const EXPIRY_SKEW_MS = 60_000;
 const DEFAULT_LOGIN_MESSAGE = 'Not authenticated. Please run "autodisc login".';
@@ -32,14 +34,28 @@ function isExpired(expiresAt?: string) {
   return expiryMs - Date.now() <= EXPIRY_SKEW_MS;
 }
 
-export function saveSession(token: string, user?: User, expiresIn?: number, refreshToken?: string) {
+export function saveSession(
+  token: string,
+  user?: User,
+  expiresIn?: number,
+  refreshToken?: string,
+  credentialType?: AuthCredentialType,
+) {
   const config = getConfigManager();
   const existing = config.getAuth();
+  const resolvedCredentialType = credentialTypeForToken(token, credentialType);
   const session: AuthSession = {
     token,
-    refreshToken: refreshToken ?? existing?.refreshToken,
+    credentialType: resolvedCredentialType,
+    refreshToken:
+      resolvedCredentialType === 'session'
+        ? refreshToken ?? existing?.refreshToken
+        : undefined,
     user: user ?? existing?.user ?? { id: '', email: '' },
-    expiresAt: expiresIn === undefined ? existing?.expiresAt : computeExpiry(expiresIn),
+    expiresAt:
+      resolvedCredentialType === 'api_key'
+        ? undefined
+        : expiresIn === undefined ? existing?.expiresAt : computeExpiry(expiresIn),
     receivedAt: new Date().toISOString(),
   };
   config.setAuth(session);
@@ -94,9 +110,10 @@ export async function refreshAuthenticatedSession(message = DEFAULT_LOGIN_MESSAG
 }
 
 export async function ensureAuthenticated(message = DEFAULT_LOGIN_MESSAGE) {
-  if (process.env.AUTODISC_TOKEN) {
+  const environment = environmentCredential();
+  if (environment) {
     return {
-      token: process.env.AUTODISC_TOKEN,
+      ...environment,
       user: getSession()?.user ?? { id: '', email: '' },
       receivedAt: new Date().toISOString(),
     } satisfies AuthSession;
@@ -107,7 +124,7 @@ export async function ensureAuthenticated(message = DEFAULT_LOGIN_MESSAGE) {
     throw new Error(message);
   }
 
-  if (!isExpired(session.expiresAt)) {
+  if (session.credentialType === 'api_key' || !isExpired(session.expiresAt)) {
     return session;
   }
 
@@ -115,9 +132,5 @@ export async function ensureAuthenticated(message = DEFAULT_LOGIN_MESSAGE) {
 }
 
 export async function requireSession(message = DEFAULT_LOGIN_MESSAGE) {
-  const session = getSession();
-  if (!session?.token) {
-    throw new Error(message);
-  }
   return ensureAuthenticated(message);
 }

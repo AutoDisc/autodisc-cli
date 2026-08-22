@@ -25,6 +25,8 @@ function createManager() {
 beforeEach(() => {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autodisc-cli-config-test-'));
   delete process.env.AUTODISC_API_URL;
+  delete process.env.AUTODISC_PUBLIC_API_URL;
+  delete process.env.AUTODISC_API_KEY;
   delete process.env.AUTODISC_TOKEN;
   delete process.env.AUTODISC_DEBUG;
   delete process.env.AUTODISC_NO_COLOR;
@@ -33,6 +35,8 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(tempDir, { recursive: true, force: true });
   delete process.env.AUTODISC_API_URL;
+  delete process.env.AUTODISC_PUBLIC_API_URL;
+  delete process.env.AUTODISC_API_KEY;
   delete process.env.AUTODISC_TOKEN;
   delete process.env.AUTODISC_DEBUG;
   delete process.env.AUTODISC_NO_COLOR;
@@ -55,6 +59,21 @@ describe('ConfigManager', () => {
     manager.setAuth(createSession({ token: 'stored-token' }));
     process.env.AUTODISC_TOKEN = 'env-token';
     expect(manager.getToken()).toBe('env-token');
+  });
+
+  it('uses the public API origin for dashboard API keys', () => {
+    const manager = createManager();
+    expect(manager.getPublicApiUrl()).toBe('https://api.autodisc.xyz');
+    process.env.AUTODISC_PUBLIC_API_URL = 'https://public.example.test/';
+    expect(manager.getPublicApiUrl()).toBe('https://public.example.test');
+  });
+
+  it('prefers AUTODISC_API_KEY over other configured credentials', () => {
+    const manager = createManager();
+    manager.setAuth(createSession({ token: 'stored-token' }));
+    process.env.AUTODISC_TOKEN = 'session-token';
+    process.env.AUTODISC_API_KEY = 'adk_environment';
+    expect(manager.getToken()).toBe('adk_environment');
   });
 
   it('masks sensitive tokens when requested', () => {

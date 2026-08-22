@@ -2,6 +2,7 @@ import path from 'path';
 import os from 'os';
 
 export const DEFAULT_API_URL = 'https://autodisc.xyz';
+export const DEFAULT_PUBLIC_API_URL = 'https://api.autodisc.xyz';
 export const API_BASE_PATH = '/api';
 
 export const CONFIG_DIR = process.env.AUTODISC_CONFIG_PATH

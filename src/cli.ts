@@ -6,6 +6,7 @@ import { registerAuthCommands } from './modules/auth/commands.js';
 import { registerConfigCommands } from './modules/config/commands.js';
 import { registerHostingCommands } from './modules/hosting/commands.js';
 import { registerProjectCommands } from './modules/project/commands.js';
+import { registerServerCommands } from './modules/servers/commands.js';
 
 export function createProgram() {
   const program = new Command();
@@ -41,6 +42,7 @@ export function createProgram() {
   registerHostingCommands(program);
   registerAgentCommands(program);
   registerProjectCommands(program);
+  registerServerCommands(program);
 
   program
     .command('doctor')

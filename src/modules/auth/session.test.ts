@@ -61,6 +61,7 @@ function freshSession(overrides?: Partial<AuthSession>): AuthSession {
 beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.AUTODISC_TOKEN;
+  delete process.env.AUTODISC_API_KEY;
   delete store.auth;
 });
 
@@ -83,6 +84,22 @@ describe('session management', () => {
     const session = await ensureAuthenticated();
 
     expect(session.token).toBe('fresh-token');
+    expect(createHttpClient).not.toHaveBeenCalled();
+  });
+
+  it('returns API keys without attempting browser-session refresh', async () => {
+    const { ensureAuthenticated } = await import('./session.js');
+    store.auth = freshSession({
+      token: 'adk_stored',
+      credentialType: 'api_key',
+      refreshToken: undefined,
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    const session = await ensureAuthenticated();
+
+    expect(session.token).toBe('adk_stored');
+    expect(session.credentialType).toBe('api_key');
     expect(createHttpClient).not.toHaveBeenCalled();
   });
 

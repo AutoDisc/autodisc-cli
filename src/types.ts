@@ -55,6 +55,10 @@ export interface CLIConfig {
   telemetry: {
     enabled: boolean;
   };
+  updates?: {
+    checkedAt?: string;
+    latestVersion?: string;
+  };
 }
 
 export interface DeviceCodeResponse {

@@ -108,6 +108,19 @@ Use `autodisc servers list|get|quote|create` to inspect and provision servers,
 and `autodisc servers start|stop|restart|delete` for lifecycle operations.
 Server commands require a canonical project UUID.
 
+## Updates
+
+The CLI checks npm at most once every 24 hours and prints a notice when a newer
+release is available. It never replaces itself while another command is
+running. Install the latest release explicitly with:
+
+```bash
+autodisc update
+```
+
+Use `autodisc update --check` to check without installing, or set
+`AUTODISC_DISABLE_UPDATE_CHECK=1` to disable periodic update notices.
+
 For configuration and usage details, visit the [Autodisc documentation](https://docs.autodisc.xyz).
 
 ## License

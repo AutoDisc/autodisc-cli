@@ -44,6 +44,7 @@ describe('createProgram', () => {
       'agent:chat',
       'project',
       'servers',
+      'update',
       'doctor',
     ]);
   });

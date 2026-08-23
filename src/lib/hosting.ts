@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { randomUUID } from 'node:crypto';
-import { setTimeout as sleep } from 'node:timers/promises';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
@@ -63,33 +62,24 @@ function isAmbiguousMutationError(error: unknown): boolean {
   return !error.response || (status !== undefined && status >= 500);
 }
 
+export class AmbiguousMutationError extends Error {
+  constructor(operation: string, message: string) {
+    super(
+      `Autodisc could not confirm whether the ${operation} request completed (${message}). ` +
+      'Checking the service state is required before retrying.'
+    );
+    this.name = 'AmbiguousMutationError';
+  }
+}
+
 function mutationError(operation: string, error: unknown): Error {
   const message = extractAxiosError(error);
   if (!isAmbiguousMutationError(error)) return new Error(message);
-  return new Error(
-    `Autodisc could not confirm whether the ${operation} request completed (${message}). ` +
-    'Run "autodisc status" before retrying; use "autodisc logs" for deployment details.'
-  );
+  return new AmbiguousMutationError(operation, message);
 }
 
 export class HostingAPI {
   private client = createHttpClient();
-
-  private async idempotentActionWithRetry<T>(request: () => Promise<{ data: T }>): Promise<T> {
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        return (await request()).data;
-      } catch (error) {
-        lastError = error;
-        const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-        const transient = axios.isAxiosError(error) && (!error.response || (status !== undefined && status >= 500));
-        if (!transient || attempt === 3) break;
-        await sleep(attempt * 500);
-      }
-    }
-    throw lastError;
-  }
 
   private configuredServerId(): string | undefined {
     return getConfigManager().getValue<string>('deploy.currentServer') || undefined;
@@ -147,14 +137,15 @@ export class HostingAPI {
   async redeployServer(serverId = this.configuredServerId()): Promise<HostingServerResponse> {
     const idempotencyKey = randomUUID();
     try {
-      return await this.idempotentActionWithRetry(() => this.client.post<HostingServerResponse>(
+      const { data } = await this.client.post<HostingServerResponse>(
         '/hosting/server/redeploy',
         undefined,
         {
           params: serverId ? { server_id: serverId } : undefined,
           headers: { 'Idempotency-Key': idempotencyKey },
         }
-      ));
+      );
+      return data;
     } catch (error) {
       throw mutationError('redeploy', error);
     }
@@ -263,7 +254,7 @@ export class HostingAPI {
       );
       return data;
     } catch (error) {
-      throw new Error(extractAxiosError(error));
+      throw mutationError('service creation', error);
     }
   }
 
@@ -276,7 +267,7 @@ export class HostingAPI {
       );
       return data;
     } catch (error) {
-      throw new Error(extractAxiosError(error));
+      throw mutationError('service update', error);
     }
   }
 

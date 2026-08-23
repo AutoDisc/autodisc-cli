@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { clientPost } = vi.hoisted(() => ({
+const { clientPost, clientPatch } = vi.hoisted(() => ({
   clientPost: vi.fn(),
+  clientPatch: vi.fn(),
 }));
 
 vi.mock('./config.js', () => ({
@@ -13,6 +14,7 @@ vi.mock('./config.js', () => ({
 vi.mock('./http.js', () => ({
   createHttpClient: () => ({
     post: (...args: unknown[]) => clientPost(...args),
+    patch: (...args: unknown[]) => clientPatch(...args),
   }),
   extractAxiosError: (error: unknown) => error instanceof Error ? error.message : 'request failed',
 }));
@@ -33,7 +35,8 @@ const server = {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  clientPost.mockReset();
+  clientPatch.mockReset();
 });
 
 describe('HostingAPI mutation handling', () => {
@@ -51,22 +54,29 @@ describe('HostingAPI mutation handling', () => {
 
     await expect(new HostingAPI().deployBundle('server-1', {
       upload_key: 'uploads/example.zip',
-    })).rejects.toThrow('Run "autodisc status" before retrying');
+    })).rejects.toThrow('Checking the service state is required before retrying');
     expect(clientPost).toHaveBeenCalledTimes(1);
   });
 
-  it('reuses one idempotency key when a redeploy is retried', async () => {
-    clientPost
-      .mockRejectedValueOnce(responseError(502, 'Temporary gateway failure'))
-      .mockResolvedValueOnce({ data: server });
+  it('sends an idempotency key but does not repeat an ambiguous redeploy', async () => {
+    clientPost.mockRejectedValue(responseError(524, 'Cloudflare origin timeout'));
 
-    await expect(new HostingAPI().redeployServer('server-1')).resolves.toEqual(server);
+    await expect(new HostingAPI().redeployServer('server-1')).rejects.toThrow(
+      'could not confirm whether the redeploy request completed'
+    );
 
-    expect(clientPost).toHaveBeenCalledTimes(2);
-    const firstConfig = clientPost.mock.calls[0]?.[2] as { headers: Record<string, string> };
-    const secondConfig = clientPost.mock.calls[1]?.[2] as { headers: Record<string, string> };
-    expect(firstConfig.headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
-    expect(secondConfig.headers['Idempotency-Key']).toBe(firstConfig.headers['Idempotency-Key']);
+    expect(clientPost).toHaveBeenCalledTimes(1);
+    const config = clientPost.mock.calls[0]?.[2] as { headers: Record<string, string> };
+    expect(config.headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('marks an ambiguous service update for read-after-timeout recovery', async () => {
+    clientPatch.mockRejectedValue(responseError(524, 'Cloudflare origin timeout'));
+
+    await expect(new HostingAPI().updateServer('server-1', { name: 'example' })).rejects.toMatchObject({
+      name: 'AmbiguousMutationError',
+    });
+    expect(clientPatch).toHaveBeenCalledTimes(1);
   });
 
   it('keeps definitive client errors concise', async () => {

@@ -2,13 +2,14 @@ import path from 'path';
 import chalk from 'chalk';
 import { loadDeployConfig, hasDeployConfig, saveDeployConfig } from '../../lib/deploy-config.js';
 import { createDeploymentZip } from '../../lib/zip.js';
-import { HostingAPI, UpsertServerPayload } from '../../lib/hosting.js';
+import { AmbiguousMutationError, HostingAPI, UpsertServerPayload } from '../../lib/hosting.js';
 import { createSpinner } from '../../lib/spinner.js';
 import { logger } from '../../lib/logger.js';
 import { autoConfigWithPreview } from '../../lib/auto-config.js';
 import { confirm } from '../../lib/prompts.js';
 import { DeployConfig } from '../../types.js';
 import { AnonymousDeploymentsAPI, AnonymousDeploymentResponse } from '../../lib/anonymous-deployments.js';
+import { latestDeploymentId, recoverAmbiguousDeployment } from './deployment-recovery.js';
 
 export interface DeployCommandOptions {
   config?: string;
@@ -191,6 +192,7 @@ export async function deploy(options: DeployCommandOptions) {
   const hydratedProject = await hosting.getProject(project.id);
   let server = hydratedProject.services.find((service) => service.name === deployConfig.name);
   const serviceAlreadyExisted = Boolean(server);
+  let deploymentAlreadyAccepted = false;
 
   if (!server) {
     const upsertSpinner = createSpinner('Creating project service');
@@ -201,10 +203,26 @@ export async function deploy(options: DeployCommandOptions) {
         payload,
         hydratedProject.default_environment_id,
       );
+      deploymentAlreadyAccepted = server.status === 'provisioning' || server.status === 'running';
       upsertSpinner.succeed();
     } catch (error) {
-      upsertSpinner.fail();
-      throw error;
+      if (!(error instanceof AmbiguousMutationError)) {
+        upsertSpinner.fail();
+        throw error;
+      }
+      const recovered = await recoverAmbiguousDeployment(hosting, {
+        projectId: project.id,
+        serviceName: deployConfig.name,
+        expectedSettings: payload,
+        serviceDidNotExist: true,
+      });
+      if (!recovered) {
+        upsertSpinner.fail();
+        throw error;
+      }
+      server = recovered.server;
+      deploymentAlreadyAccepted = recovered.deploymentAccepted;
+      upsertSpinner.succeed('Service creation accepted');
     }
   }
 
@@ -213,7 +231,8 @@ export async function deploy(options: DeployCommandOptions) {
   cliConfig.setValue('deploy.currentServer', server.id);
 
   if (serviceAlreadyExisted) {
-    server = await hosting.updateServer(server.id, {
+    const serverBeforeUpdate = server;
+    const updatePayload: Partial<UpsertServerPayload> = {
       name: deployConfig.name,
       ...(deployConfig.source.type === 'repo'
         ? {
@@ -232,29 +251,79 @@ export async function deploy(options: DeployCommandOptions) {
         ? { ...(server.environment ?? {}), ...deployConfig.environment }
         : undefined,
       auto_restart: deployConfig.deployment.auto_restart ?? true,
-    });
+    };
+    const previousDeploymentId = await latestDeploymentId(hosting, server.id);
+    try {
+      server = await hosting.updateServer(server.id, updatePayload);
+      deploymentAlreadyAccepted = server.status === 'provisioning';
+    } catch (error) {
+      if (!(error instanceof AmbiguousMutationError)) throw error;
+      const recovered = await recoverAmbiguousDeployment(hosting, {
+        projectId: project.id,
+        serviceName: deployConfig.name,
+        serverId: server.id,
+        previousDeploymentId,
+        previousServer: serverBeforeUpdate,
+        expectedSettings: updatePayload,
+      });
+      if (!recovered) throw error;
+      server = recovered.server;
+      deploymentAlreadyAccepted = recovered.deploymentAccepted;
+      logger.info('The proxy timed out, but Autodisc confirmed the service update was accepted.');
+    }
   }
 
   if (deployConfig.source.type === 'upload' && uploadKey) {
     const deploySpinner = createSpinner(options.start === false ? 'Applying deployment bundle' : 'Deploying project');
+    const serverBeforeDeploy = server;
+    const previousDeploymentId = await latestDeploymentId(hosting, server.id);
+    const bundleSettings: Partial<UpsertServerPayload> = {
+      source_upload_key: uploadKey,
+      source_upload_name: uploadName,
+      start_command: deployConfig.runtime.start_command,
+      setup_command: setupCommand,
+      detected_stack: deployConfig.runtime.stack,
+      environment: deployConfig.environment
+        ? { ...(server.environment ?? {}), ...deployConfig.environment }
+        : undefined,
+      auto_restart: deployConfig.deployment.auto_restart ?? true,
+    };
     deploySpinner.start();
     try {
       server = await hosting.deployBundle(server.id, {
-        upload_key: uploadKey,
-        upload_name: uploadName,
-        start_command: deployConfig.runtime.start_command,
-        setup_command: setupCommand,
-        detected_stack: deployConfig.runtime.stack,
-        environment: deployConfig.environment
-          ? { ...(server.environment ?? {}), ...deployConfig.environment }
-          : undefined,
-        auto_restart: deployConfig.deployment.auto_restart ?? true,
+        upload_key: bundleSettings.source_upload_key!,
+        upload_name: bundleSettings.source_upload_name,
+        start_command: bundleSettings.start_command,
+        setup_command: bundleSettings.setup_command,
+        detected_stack: bundleSettings.detected_stack,
+        environment: bundleSettings.environment,
+        auto_restart: bundleSettings.auto_restart,
         start: options.start !== false,
       });
       deploySpinner.succeed();
     } catch (error) {
-      deploySpinner.fail();
-      throw error;
+      if (!(error instanceof AmbiguousMutationError)) {
+        deploySpinner.fail();
+        throw error;
+      }
+      const recovered = await recoverAmbiguousDeployment(hosting, {
+        projectId: project.id,
+        serviceName: deployConfig.name,
+        serverId: server.id,
+        previousDeploymentId,
+        previousServer: serverBeforeDeploy,
+        expectedSettings: bundleSettings,
+      });
+      if (!recovered) {
+        deploySpinner.fail();
+        throw error;
+      }
+      server = recovered.server;
+      deploySpinner.succeed(
+        recovered.deploymentAccepted
+          ? 'Deployment accepted; build is continuing'
+          : 'Deployment bundle accepted',
+      );
     }
   }
 
@@ -272,7 +341,8 @@ export async function deploy(options: DeployCommandOptions) {
   }
 
   const startSpinner = createSpinner('Deploying project');
-  if (deployConfig.source.type === 'repo') {
+  if (deployConfig.source.type === 'repo' && !deploymentAlreadyAccepted) {
+    const previousDeploymentId = await latestDeploymentId(hosting, server.id);
     startSpinner.start();
     try {
       server = serviceAlreadyExisted
@@ -280,8 +350,23 @@ export async function deploy(options: DeployCommandOptions) {
         : await hosting.startServer(server.id);
       startSpinner.succeed();
     } catch (error) {
-      startSpinner.fail();
-      throw error;
+      if (!(error instanceof AmbiguousMutationError)) {
+        startSpinner.fail();
+        throw error;
+      }
+      const recovered = await recoverAmbiguousDeployment(hosting, {
+        projectId: project.id,
+        serviceName: deployConfig.name,
+        serverId: server.id,
+        previousDeploymentId,
+      });
+      if (!recovered || !recovered.deploymentAccepted) {
+        startSpinner.fail();
+        throw error;
+      }
+      server = recovered.server;
+      deploymentAlreadyAccepted = true;
+      startSpinner.succeed('Deployment accepted; build is continuing');
     }
   }
   logger.success(`Deployment started: ${server.name} (${chalk.cyan(server.status ?? 'queued')})`);

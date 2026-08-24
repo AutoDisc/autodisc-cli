@@ -133,6 +133,7 @@ export interface HostingServerResponse {
   environment_id?: string | null;
   name: string;
   service_type?: 'app' | 'worker' | 'postgres' | 'mysql' | 'mariadb' | 'mongo' | 'redis' | 'libsql' | 'cron' | null;
+  managed_addon_type?: 'postgres' | 'mysql' | 'mariadb' | 'mongo' | 'redis' | 'libsql' | null;
   source_type: 'repo' | 'upload';
   repo_full_name?: string;
   repo_branch?: string;

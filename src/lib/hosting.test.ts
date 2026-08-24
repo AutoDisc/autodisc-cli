@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { clientPost, clientPatch } = vi.hoisted(() => ({
+const { clientPost, clientPatch, clientDelete } = vi.hoisted(() => ({
   clientPost: vi.fn(),
   clientPatch: vi.fn(),
+  clientDelete: vi.fn(),
 }));
 
 vi.mock('./config.js', () => ({
@@ -15,6 +16,7 @@ vi.mock('./http.js', () => ({
   createHttpClient: () => ({
     post: (...args: unknown[]) => clientPost(...args),
     patch: (...args: unknown[]) => clientPatch(...args),
+    delete: (...args: unknown[]) => clientDelete(...args),
   }),
   extractAxiosError: (error: unknown) => error instanceof Error ? error.message : 'request failed',
 }));
@@ -37,6 +39,7 @@ const server = {
 beforeEach(() => {
   clientPost.mockReset();
   clientPatch.mockReset();
+  clientDelete.mockReset();
 });
 
 describe('HostingAPI mutation handling', () => {
@@ -77,6 +80,15 @@ describe('HostingAPI mutation handling', () => {
       name: 'AmbiguousMutationError',
     });
     expect(clientPatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks an ambiguous project deletion for read-after-timeout recovery', async () => {
+    clientDelete.mockRejectedValue(responseError(524, 'Cloudflare origin timeout'));
+
+    await expect(new HostingAPI().deleteProject('project-1')).rejects.toMatchObject({
+      name: 'AmbiguousMutationError',
+    });
+    expect(clientDelete).toHaveBeenCalledTimes(1);
   });
 
   it('keeps definitive client errors concise', async () => {

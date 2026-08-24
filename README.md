@@ -81,9 +81,35 @@ multipart field and deployment options as JSON in the `request` field. Creation
 requires no Autodisc credential. Treat the returned control token and claim URL
 as secrets.
 
-If a start or deploy command reports a gateway, origin, or timeout error, the
-backend may still have accepted the request. Check `autodisc status` and
-`autodisc logs` before retrying.
+Deploy mutations are sent once. If a gateway times out after accepting one, the
+CLI checks live service and deployment state before deciding whether it failed.
+
+## Managed databases
+
+Add a private managed database to the selected project and bind its connection
+URL to one application service:
+
+```bash
+autodisc add --database postgres --bind api:DATABASE_URL
+```
+
+Database provisioning completes before the binding is stored, and the target
+service is redeployed only after the connection is ready. Credentials are kept
+as service-scoped secrets and are redacted from JSON output.
+
+PostgreSQL, MySQL, MariaDB, MongoDB, Redis, and libSQL use the same workflow:
+
+```bash
+autodisc database add redis --name cache --bind worker:REDIS_URL
+autodisc database list
+autodisc database status cache
+autodisc database bind cache worker --variable REDIS_URL
+autodisc database stop cache
+autodisc database start cache
+```
+
+Use `--project <id-or-name>` when no project is selected, and `--no-deploy` to
+store a binding without immediately redeploying its target service.
 
 ## Project servers
 

@@ -14,6 +14,10 @@ import type {
   HostingServerResponse,
   HostingStatsResponse,
   HostingUploadResponse,
+  ManagedDatabaseResponse,
+  ManagedDatabasesResponse,
+  ManagedDatabaseType,
+  EnvironmentVariableResponse,
 } from '../types.js';
 
 export interface UpsertServerPayload {
@@ -236,6 +240,95 @@ export class HostingAPI {
       return data;
     } catch (error) {
       throw new Error(extractAxiosError(error));
+    }
+  }
+
+  async listProjectDatabases(projectId: string): Promise<ManagedDatabaseResponse[]> {
+    try {
+      const { data } = await this.client.get<ManagedDatabasesResponse>(
+        `/hosting/projects/${projectId}/databases`
+      );
+      return data.databases;
+    } catch (error) {
+      throw new Error(extractAxiosError(error));
+    }
+  }
+
+  async createProjectDatabase(
+    projectId: string,
+    payload: {
+      type: ManagedDatabaseType;
+      name: string;
+      description?: string;
+      environment_id?: string;
+    },
+    idempotencyKey: string,
+  ): Promise<ManagedDatabaseResponse> {
+    try {
+      const { data } = await this.client.post<ManagedDatabaseResponse>(
+        `/hosting/projects/${projectId}/databases`,
+        payload,
+        { headers: { 'Idempotency-Key': idempotencyKey } },
+      );
+      return data;
+    } catch (error) {
+      throw mutationError('database creation', error);
+    }
+  }
+
+  async getManagedDatabase(databaseId: string): Promise<ManagedDatabaseResponse> {
+    try {
+      const { data } = await this.client.get<ManagedDatabaseResponse>(
+        `/hosting/databases/${databaseId}`
+      );
+      return data;
+    } catch (error) {
+      throw new Error(extractAxiosError(error));
+    }
+  }
+
+  async bindManagedDatabase(
+    databaseId: string,
+    serviceId: string,
+    variable?: string,
+  ): Promise<EnvironmentVariableResponse> {
+    try {
+      const { data } = await this.client.post<EnvironmentVariableResponse>(
+        `/hosting/databases/${databaseId}/bindings`,
+        { service_id: serviceId, ...(variable ? { variable } : {}) },
+      );
+      return data;
+    } catch (error) {
+      throw mutationError('database binding', error);
+    }
+  }
+
+  async databaseAction(
+    databaseId: string,
+    action: 'start' | 'stop' | 'redeploy',
+  ): Promise<ManagedDatabaseResponse> {
+    try {
+      const { data } = await this.client.post<ManagedDatabaseResponse>(
+        `/hosting/databases/${databaseId}/${action}`,
+        undefined,
+        action === 'redeploy'
+          ? { headers: { 'Idempotency-Key': randomUUID() } }
+          : undefined,
+      );
+      return data;
+    } catch (error) {
+      throw mutationError(`database ${action}`, error);
+    }
+  }
+
+  async deleteManagedDatabase(databaseId: string): Promise<ManagedDatabaseResponse> {
+    try {
+      const { data } = await this.client.delete<ManagedDatabaseResponse>(
+        `/hosting/databases/${databaseId}`
+      );
+      return data;
+    } catch (error) {
+      throw mutationError('database deletion', error);
     }
   }
 

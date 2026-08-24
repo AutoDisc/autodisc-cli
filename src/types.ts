@@ -129,7 +129,10 @@ export interface DeployConfig {
 export interface HostingServerResponse {
   id: string;
   user_id: string;
+  project_id?: string | null;
+  environment_id?: string | null;
   name: string;
+  service_type?: 'app' | 'worker' | 'postgres' | 'mysql' | 'mariadb' | 'mongo' | 'redis' | 'libsql' | 'cron' | null;
   source_type: 'repo' | 'upload';
   repo_full_name?: string;
   repo_branch?: string;
@@ -202,6 +205,50 @@ export interface HostingUploadResponse {
   upload_key: string;
   bucket: string;
   size_bytes: number;
+}
+
+export type ManagedDatabaseType = 'postgres' | 'mysql' | 'mariadb' | 'mongo' | 'redis' | 'libsql';
+
+export interface ManagedDatabaseConnectionResponse {
+  host?: string | null;
+  port: number;
+  database?: string | null;
+  username?: string | null;
+  password?: string | null;
+  url?: string | null;
+}
+
+export interface ManagedDatabaseResponse {
+  id: string;
+  project_id: string;
+  environment_id: string;
+  service_id: string;
+  name: string;
+  description?: string | null;
+  engine: ManagedDatabaseType;
+  version?: string | null;
+  status: string;
+  status_reason?: string | null;
+  private_networking: Record<string, unknown>;
+  public_tcp: Record<string, unknown>;
+  connection: ManagedDatabaseConnectionResponse;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ManagedDatabasesResponse {
+  databases: ManagedDatabaseResponse[];
+}
+
+export interface EnvironmentVariableResponse {
+  id: string;
+  environment_id: string;
+  service_id?: string | null;
+  key: string;
+  value_preview?: string | null;
+  secret: boolean;
+  source: string;
+  source_resource_id?: string | null;
 }
 
 export interface AgentConversationMessage {

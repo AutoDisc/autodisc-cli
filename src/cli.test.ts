@@ -44,8 +44,29 @@ describe('createProgram', () => {
       'agent:chat',
       'project',
       'servers',
+      'add',
+      'database',
       'update',
       'doctor',
+    ]);
+  });
+
+  it('exposes Railway-style database creation and database lifecycle commands', () => {
+    const program = createProgram();
+    const add = program.commands.find((command) => command.name() === 'add');
+    const database = program.commands.find((command) => command.name() === 'database');
+
+    expect(add?.options.some((option) => option.long === '--database')).toBe(true);
+    expect(database?.aliases()).toContain('db');
+    expect(database?.commands.map((command) => command.name())).toEqual([
+      'add',
+      'list',
+      'status',
+      'bind',
+      'start',
+      'stop',
+      'redeploy',
+      'delete',
     ]);
   });
 

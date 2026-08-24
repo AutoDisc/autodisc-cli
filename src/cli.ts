@@ -8,6 +8,7 @@ import { registerHostingCommands } from './modules/hosting/commands.js';
 import { registerProjectCommands } from './modules/project/commands.js';
 import { registerServerCommands } from './modules/servers/commands.js';
 import { registerUpdateCommand } from './modules/update/commands.js';
+import { registerDatabaseCommands } from './modules/database/commands.js';
 
 export function createProgram() {
   const program = new Command();
@@ -44,6 +45,7 @@ export function createProgram() {
   registerAgentCommands(program);
   registerProjectCommands(program);
   registerServerCommands(program);
+  registerDatabaseCommands(program);
   registerUpdateCommand(program, pkg.version as string);
 
   program

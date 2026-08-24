@@ -9,6 +9,7 @@ import { registerProjectCommands } from './modules/project/commands.js';
 import { registerServerCommands } from './modules/servers/commands.js';
 import { registerUpdateCommand } from './modules/update/commands.js';
 import { registerDatabaseCommands } from './modules/database/commands.js';
+import { registerBucketCommands } from './modules/buckets/commands.js';
 
 export function createProgram() {
   const program = new Command();
@@ -46,6 +47,7 @@ export function createProgram() {
   registerProjectCommands(program);
   registerServerCommands(program);
   registerDatabaseCommands(program);
+  registerBucketCommands(program);
   registerUpdateCommand(program, pkg.version as string);
 
   program

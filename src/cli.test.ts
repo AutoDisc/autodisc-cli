@@ -46,6 +46,7 @@ describe('createProgram', () => {
       'servers',
       'add',
       'database',
+      'buckets',
       'update',
       'doctor',
     ]);

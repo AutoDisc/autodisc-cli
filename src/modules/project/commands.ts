@@ -1,7 +1,8 @@
 import type { Command } from 'commander';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { runCommand } from '../../lib/command.js';
 import { getConfigManager } from '../../lib/config.js';
-import { HostingAPI, redactServerEnvironment } from '../../lib/hosting.js';
+import { AmbiguousMutationError, HostingAPI, redactServerEnvironment } from '../../lib/hosting.js';
 import { logger } from '../../lib/logger.js';
 import { confirm } from '../../lib/prompts.js';
 import type { HostingProjectResponse, HostingServerResponse } from '../../types.js';
@@ -46,7 +47,88 @@ async function listProjects(json: boolean): Promise<void> {
   projects.forEach((project) => {
     const marker = project.id === currentId ? '*' : ' ';
     logger.info(`${marker} ${project.name} (${project.slug}) — ${project.services.length} service(s) — ${project.id}`);
+    project.services.forEach((service) => {
+      const type = service.managed_addon_type || service.service_type || 'app';
+      logger.info(`    - ${service.name} — ${type} — ${service.status}`);
+    });
   });
+}
+
+function managedDatabaseServices(project: HostingProjectResponse): HostingServerResponse[] {
+  const databaseTypes = new Set(['postgres', 'mysql', 'mariadb', 'mongo', 'redis', 'libsql']);
+  return project.services.filter((service) => {
+    const type = service.managed_addon_type || service.service_type || '';
+    return service.detected_stack === 'managed_database' || databaseTypes.has(type);
+  });
+}
+
+async function deletionCompleted(
+  hosting: HostingAPI,
+  projectId: string,
+  attempts = 6,
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const projects = await hosting.listProjects();
+      if (!projects.some((project) => project.id === projectId)) return true;
+    } catch {
+      // The read can briefly share the same edge failure as the delete.
+    }
+    if (attempt < attempts) await sleep(1_000);
+  }
+  return false;
+}
+
+export interface DeleteProjectOptions {
+  yes?: boolean;
+  forceManagedData?: boolean;
+}
+
+export async function deleteProject(
+  selector: string,
+  options: DeleteProjectOptions = {},
+): Promise<void> {
+  const hosting = new HostingAPI();
+  const target = matchProject(await hosting.listProjects(), selector);
+  const databases = managedDatabaseServices(target);
+  if (options.yes && databases.length > 0 && !options.forceManagedData) {
+    const names = databases.map((service) => service.name).join(', ');
+    throw new Error(
+      `Project "${target.name}" contains managed database data (${names}). ` +
+      'Refusing non-interactive deletion without --force-managed-data.',
+    );
+  }
+  if (!options.yes) {
+    if (!process.stdin.isTTY) throw new Error('Pass --yes to delete a project non-interactively.');
+    const databaseWarning = databases.length > 0
+      ? ` This permanently deletes managed database data: ${databases.map((service) => service.name).join(', ')}.`
+      : '';
+    if (!await confirm(`Permanently delete project "${target.name}" and all services?${databaseWarning}`, false)) {
+      logger.info('Deletion cancelled.');
+      return;
+    }
+  }
+
+  let confirmedAfterTimeout = false;
+  try {
+    await hosting.deleteProject(target.id);
+  } catch (error) {
+    if (!(error instanceof AmbiguousMutationError) || !await deletionCompleted(hosting, target.id)) {
+      throw error;
+    }
+    confirmedAfterTimeout = true;
+  }
+
+  const config = getConfigManager();
+  if (config.getValue<string>('deploy.currentProject') === target.id) {
+    config.setValue('deploy.currentProject', null);
+    config.setValue('deploy.currentServer', null);
+  }
+  logger.success(
+    confirmedAfterTimeout
+      ? `Deleted project ${target.name} (confirmed after the response timed out)`
+      : `Deleted project ${target.name}`,
+  );
 }
 
 async function useProject(selector: string, serviceSelector?: string): Promise<void> {
@@ -112,22 +194,8 @@ export function registerProjectCommands(program: Command): void {
     .command('delete <project>')
     .description('Permanently delete a named project and all of its services')
     .option('-y, --yes', 'Skip the confirmation prompt')
-    .action(async (selector: string, options: { yes?: boolean }) => runCommand(async () => {
-      const hosting = new HostingAPI();
-      const target = matchProject(await hosting.listProjects(), selector);
-      if (!options.yes) {
-        if (!process.stdin.isTTY) throw new Error('Pass --yes to delete a project non-interactively.');
-        if (!await confirm(`Permanently delete project "${target.name}" and all services?`, false)) {
-          logger.info('Deletion cancelled.');
-          return;
-        }
-      }
-      await hosting.deleteProject(target.id);
-      const config = getConfigManager();
-      if (config.getValue<string>('deploy.currentProject') === target.id) {
-        config.setValue('deploy.currentProject', null);
-        config.setValue('deploy.currentServer', null);
-      }
-      logger.success(`Deleted project ${target.name}`);
-    }));
+    .option('--force-managed-data', 'Also permanently delete managed databases and their data')
+    .action(async (selector: string, options: DeleteProjectOptions) =>
+      runCommand(() => deleteProject(selector, options))
+    );
 }

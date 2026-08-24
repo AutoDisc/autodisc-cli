@@ -7,6 +7,39 @@ import { logger } from '../../lib/logger.js';
 import { password } from '../../lib/prompts.js';
 
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const CONNECTION_URL_KEYS = new Set([
+  'DATABASE_URL',
+  'POSTGRES_URL',
+  'MYSQL_URL',
+  'MARIADB_URL',
+  'MONGO_URL',
+  'MONGODB_URI',
+  'REDIS_URL',
+  'LIBSQL_URL',
+]);
+
+export function validateHostedConnectionVariable(key: string, value: string): void {
+  if (!CONNECTION_URL_KEYS.has(key.toUpperCase())) return;
+  if (/placeholder/i.test(value)) {
+    throw new Error(
+      `${key} contains placeholder credentials. Create and bind a real managed database with ` +
+      '`autodisc add --database <type> --bind <service>`.',
+    );
+  }
+  try {
+    const hostname = new URL(value).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(hostname)) {
+      throw new Error(
+        `${key} points to ${hostname}, which resolves inside the application container. ` +
+        'Use `autodisc add --database <type> --bind <service>` for a reachable database.',
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith(`${key} points to `)) throw error;
+    // Preserve compatibility with driver-specific connection formats. The
+    // obvious placeholder and loopback cases above remain blocked.
+  }
+}
 
 function formatEnv(env: Record<string, string>, showValues = false) {
   const entries = Object.entries(env);
@@ -91,6 +124,7 @@ export async function setEnv(pairs: string[]) {
         : { key: pair.trim(), value: await password(`Enter value for ${pair.trim()}:`) };
       const { key, value } = parsed;
       if (!ENV_KEY_PATTERN.test(key)) throw new Error(`Invalid environment variable name: ${key}`);
+      validateHostedConnectionVariable(key, value);
       current[key] = value;
     }
     await hosting.updateEnvironment(current);
@@ -148,6 +182,7 @@ export async function pushEnv(filePath?: string) {
   try {
     const content = fs.readFileSync(resolved, 'utf8');
     const parsed = parseDotEnv(content);
+    Object.entries(parsed).forEach(([key, value]) => validateHostedConnectionVariable(key, value));
     await hosting.updateEnvironment(parsed);
     spinner.succeed();
     logger.success('Environment updated');

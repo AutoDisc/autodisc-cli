@@ -46,6 +46,17 @@ function printJsonLine(value: unknown) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
+export function actionableLogsError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/cloudflare|origin web server|timed? out/i.test(message)) {
+    return new Error(
+      `${message} Log retrieval failure does not identify the application's runtime cause. ` +
+      'Do not delete or recreate the project based on this error; inspect status and retry logs later.',
+    );
+  }
+  return error instanceof Error ? error : new Error(message);
+}
+
 export async function showLogs(options: LogsOptions = {}) {
   const hosting = new HostingAPI();
   const tail = options.tail ?? 200;
@@ -100,6 +111,6 @@ export async function showLogs(options: LogsOptions = {}) {
     }
   } catch (error) {
     spinner?.fail();
-    throw error;
+    throw actionableLogsError(error);
   }
 }

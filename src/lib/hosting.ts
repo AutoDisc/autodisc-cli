@@ -396,7 +396,7 @@ export class HostingAPI {
       const { data } = await this.client.delete<HostingProjectResponse>(`/hosting/projects/${projectId}`);
       return data;
     } catch (error) {
-      throw new Error(extractAxiosError(error));
+      throw mutationError('project deletion', error);
     }
   }
 

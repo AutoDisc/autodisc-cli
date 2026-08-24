@@ -113,20 +113,41 @@ export function createHttpClient(options?: ClientOptions): AxiosInstance {
   return instance;
 }
 
+function formatApiDetail(detail: unknown): string | null {
+  if (typeof detail === 'string') {
+    if (detail.trim().startsWith('{')) {
+      try {
+        const nested = JSON.parse(detail) as { detail?: unknown; error?: unknown; message?: unknown };
+        return formatApiDetail(nested.detail ?? nested.error ?? nested.message) ?? detail;
+      } catch {
+        return detail;
+      }
+    }
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item) => {
+      if (!item || typeof item !== 'object') return String(item);
+      const entry = item as { loc?: unknown; msg?: unknown; message?: unknown };
+      const location = Array.isArray(entry.loc) ? entry.loc.map(String).join('.') : '';
+      const message = entry.msg ?? entry.message;
+      return `${location ? `${location}: ` : ''}${typeof message === 'string' ? message : JSON.stringify(item)}`;
+    });
+    return messages.join('; ');
+  }
+  if (detail && typeof detail === 'object') {
+    const nested = detail as { detail?: unknown; error?: unknown; message?: unknown };
+    return formatApiDetail(nested.detail ?? nested.error ?? nested.message) ?? JSON.stringify(detail);
+  }
+  return detail == null ? null : String(detail);
+}
+
 export function extractAxiosError(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const err = error as AxiosError<{ detail?: string; error?: string; message?: string }>;
+    const err = error as AxiosError<{ detail?: unknown; error?: unknown; message?: unknown }>;
     const detail = err.response?.data?.detail || err.response?.data?.error || err.response?.data?.message;
     if (detail) {
-      if (typeof detail === 'string' && detail.trim().startsWith('{')) {
-        try {
-          const nested = JSON.parse(detail) as { detail?: string; error?: string; message?: string };
-          return nested.detail || nested.error || nested.message || detail;
-        } catch {
-          return detail;
-        }
-      }
-      return detail;
+      return formatApiDetail(detail) ?? 'Request failed';
     }
     if (err.response) return `Request failed with status ${err.response.status}`;
     if (err.request) return 'No response received from server';

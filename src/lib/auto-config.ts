@@ -442,7 +442,7 @@ export async function autoConfigWithPreview(projectRoot: string): Promise<Deploy
 
   console.log('\n' + formatConfigPreview(result) + '\n');
 
-  if (!result.config.runtime.start_command) {
+  if (!result.config.runtime.start_command && result.config.runtime.stack !== 'dockerfile') {
     logger.error('Could not determine start command for your project');
     logger.info('Please edit autodisc.yml manually or re-run: autodisc init');
     return null;

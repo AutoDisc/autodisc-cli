@@ -33,7 +33,8 @@ export async function initProject(options: InitCommandOptions) {
 
   console.log('\n' + formatConfigPreview(result) + '\n');
 
-  if (!result.config.runtime.start_command) {
+  if (!result.config.runtime.start_command && result.config.runtime.stack !== 'dockerfile') {
+    process.exitCode = 1;
     logger.error('Could not determine a start command for this project.');
     logger.info('Create autodisc.yml manually or re-run "autodisc init" with more project context.');
     return;
